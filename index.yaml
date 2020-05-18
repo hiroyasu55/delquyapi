@@ -1,0 +1,55 @@
+indexes:
+
+  - kind: Person
+    properties:
+      - name: 'age'
+      - name: 'release_date'
+
+  - kind: Person
+    properties:
+      - name: 'sex'
+      - name: 'release_date'
+
+  - kind: Person
+    properties:
+      - name: 'area'
+      - name: 'release_date'
+
+  - kind: Person
+    properties:
+      - name: 'reason'
+      - name: 'release_date'
+
+  - kind: Person
+    properties:
+      - name: 'status'
+      - name: 'release_date'
+
+  - kind: Person
+    properties:
+      - name: 'cluster_no'
+      - name: 'release_date'
+
+  - kind: Detail
+    properties:
+      - name: 'government'
+      - name: 'no'
+        direction: asc
+
+  - kind: Detail
+    properties:
+      - name: 'government'
+      - name: 'no'
+        direction: desc
+
+  - kind: Detail
+    properties:
+      - name: 'government'
+      - name: 'release_date'
+        direction: asc
+
+  - kind: Detail
+    properties:
+      - name: 'government'
+      - name: 'release_date'
+        direction: desc

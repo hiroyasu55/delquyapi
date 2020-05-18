@@ -1,0 +1,4 @@
+runtime: python37
+
+env_variables:
+    DUMMY_ENV: 'dummy!!!!!!!'

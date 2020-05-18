@@ -1,0 +1,14 @@
+.gcloudignore
+.git
+.gitignore
+__pycache__/
+/setup.cfg
+.flake8
+Pipfile
+Pipfile.lock
+Procfile
+.venv/
+.vscode/
+work/
+credential.json
+.env

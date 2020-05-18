@@ -1,0 +1,32 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[scripts]
+start = "python main.py"
+requirements = "sh -c 'pipenv lock -r > requirements.txt'"
+deploy = "sh -c 'pipenv run requirements ; gcloud app deploy --project=delquyapi'"
+deploy_index = "gcloud app deploy index.yaml --project=delquyapi"
+index = "gcloud datastore indexes create index.yaml --project=delquyapi"
+format = "autopep8 -ivr ."
+lint = "flake8 --show-source ."
+
+[dev-packages]
+autopep8 = "*"
+flake8 = "*"
+
+[packages]
+bs4 = "*"
+flask = "*"
+flask-cors = "*"
+google-cloud-datastore = "*"
+gunicorn = "*"
+pandas = "*"
+python-dotenv = "*"
+xlrd = "*"
+pdfminer-six = "*"
+flask-restful = "*"
+
+[requires]
+python_version = "3.7"
