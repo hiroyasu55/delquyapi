@@ -21,3 +21,8 @@ work
 credential.json
 patch*.py
 culc*.py
+
+scrape_*.py
+!scrape_persons.py
+!scrape_aichi.py
+!scrape_nagoya.py
