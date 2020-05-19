@@ -40,7 +40,7 @@ def insert(kind, object, id=None):
     entity.update({'created': now_string(), 'updated': now_string()})
     client.put(entity)
     entity['id'] = entity.key.id or id
-    logger.debug('insert: %s', entity['id'])
+    logger.debug('insert: kind={},id={}'.format(kind, id))
 
     return entity
 
@@ -50,7 +50,6 @@ def _update(entity, object=None):
         entity.update(object)
     entity.update({'updated': now_string()})
     client.put(entity)
-    # entity['id'] = entity.key.id
     return entity
 
 
@@ -63,7 +62,7 @@ def update(kind, object, id):
         raise Exception('Entity not found. kind={},id={}'.format(kind, id))
 
     entity = _update(entity, object=object)
-    logger.debug('update: kind=%s id=%s', kind, entity['id'])
+    logger.debug('update: kind=%s id=%s', kind, id)
 
     return entity
 
@@ -75,14 +74,14 @@ def upsert(kind, object, id=None):
         if entity:
             entity = _update(entity, object=object)
             client.put(entity)
-            logger.debug('upsert(update): kind=%s id=%s', kind, entity['id'])
+            logger.debug('upsert(update): kind=%s id=%s', kind, id)
         else:
             entity = insert(kind, object, id=id)
-            logger.debug('upsert(insert): kind=%s id=%s', kind, entity['id'])
+            logger.debug('upsert(insert): kind=%s id=%s', kind, id)
 
     else:
         entity = insert(kind, object)
-        logger.debug('upsert(insert): kind=%s id=%s', kind, entity['id'])
+        logger.debug('upsert(insert): kind=%s', kind)
 
     return entity
 
