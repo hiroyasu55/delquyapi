@@ -27,6 +27,8 @@ python-dotenv = "*"
 xlrd = "*"
 pdfminer-six = "*"
 flask-restful = "*"
+tabula-py = "*"
+flask-jwt = "*"
 
 [requires]
 python_version = "3.7"

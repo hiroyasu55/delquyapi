@@ -15,43 +15,43 @@ USER_AGENT = \
 WTF_CSRF_SECRET_KEY = "sefh30itgmp2fnp^ih26vb;fkga"
 
 AGE = {
-  '0s': '0歳',
-  '10u': '10歳未満',
-  '10s': '10代',
-  '20s': '20代',
-  '30s': '30代',
-  '40s': '40代',
-  '50s': '50代',
-  '60s': '60代',
-  '70s': '70代',
-  '80s': '80代',
-  '90s': '90代',
-  '100o': '100歳以上',
-  'unknown': '不明',
+    '0s': '0歳',
+    '10u': '10歳未満',
+    '10s': '10代',
+    '20s': '20代',
+    '30s': '30代',
+    '40s': '40代',
+    '50s': '50代',
+    '60s': '60代',
+    '70s': '70代',
+    '80s': '80代',
+    '90s': '90代',
+    '100o': '100歳以上',
+    'unknown': '不明',
 }
 
 SEX = {
-  'male': '男性',
-  'female': '女性',
-  'unknown': '不明',
+    'male': '男性',
+    'female': '女性',
+    'unknown': '不明',
 }
 
 REASON = {
-  'contact': '対人接触',
-  'abroad': '国外',
-  'other_area': '県外',
-  'recurrence': '再感染',
-  'other': 'その他',
-  'unknown': '不明',
+    'contact': '対人接触',
+    'abroad': '国外',
+    'other_area': '県外',
+    'recurrence': '再感染',
+    'other': 'その他',
+    'unknown': '不明',
 }
 
 GOVERNMENT = {
-  'aichi': '愛知県',
-  'nagoya': '名古屋市',
-  'okazaki': '岡崎市',
-  'toyota': '豊田市',
-  'toyohashi': '豊橋市',
-  'mhlw': '厚生労働省',
+    'aichi': '愛知県',
+    'nagoya': '名古屋市',
+    'okazaki': '岡崎市',
+    'toyota': '豊田市',
+    'toyohashi': '豊橋市',
+    'mhlw': '厚生労働省',
 }
 
 CONDITIONS = [
@@ -63,6 +63,8 @@ AICHI_SUMMARY_URL = \
     'https://www.pref.aichi.jp/site/covid19-aichi/kansensya-kensa.html'
 AICHI_PRESS_RELEASE_URL = \
     'https://www.pref.aichi.jp/site/covid19-aichi/corona-kisya.html'
+AICHI_TAISAKUHONBU_URL = \
+    'https://www.pref.aichi.jp/site/covid19-aichi/novel-coronavirus-taisakuhonbu.html'
 NAGOYA_PRESS_RELEASE_URL = \
     'http://www.city.nagoya.jp/kenkofukushi/page/0000126920.html'
 

@@ -1,6 +1,9 @@
 import settings  # noqa: F401
 from app import app
 import config
+import app.lib.log as log
+
+logger = log.getLogger(__name__)
 
 
 # Main

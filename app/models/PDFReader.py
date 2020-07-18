@@ -3,22 +3,23 @@ from pdfminer.layout import LAParams, LTContainer, LTTextBox
 from pdfminer.pdfinterp import PDFPageInterpreter, PDFResourceManager
 from pdfminer.pdfpage import PDFPage
 from io import StringIO
+from pprint import pprint
 
 
-def find_textboxes_recursively(layout):
+def _find_textboxes_recursively(layout):
     if isinstance(layout, LTTextBox):
         return [layout]
 
     elif isinstance(layout, LTContainer):
         boxes = []
         for child in layout:
-            boxes.extend(find_textboxes_recursively(child))
+            boxes.extend(_find_textboxes_recursively(child))
         return boxes
 
     return []
 
 
-def read_textboxes(filepath):
+def read_textboxes(filepath, pages=None, direction='horizontal'):
 
     laparams = LAParams(detect_vertical=True)
     resource_manager = PDFResourceManager()
@@ -26,12 +27,23 @@ def read_textboxes(filepath):
     interpreter = PDFPageInterpreter(resource_manager, device)
 
     texts = []
+    if pages:
+        pages = sorted(pages, key=lambda p: p)
+
     with open(filepath, 'rb') as f:
-        for page in PDFPage.get_pages(f):
+        pdfpages = PDFPage.get_pages(f)
+        num = 0
+        for page in pdfpages:
+            num += 1
+            if pages:
+                if num > pages[-1]:
+                    break
+                if num not in pages:
+                    continue
             interpreter.process_page(page)
             layout = device.get_result()
-            boxes = find_textboxes_recursively(layout)
-            boxes.sort(key=lambda b: (-b.y1, b.x0))
+            boxes = _find_textboxes_recursively(layout)
+            boxes.sort(key=lambda b: (b.x1, b.y0) if direction == 'vertical' else (-b.y0, b.x1))
             for box in boxes:
                 texts.append(box.get_text().strip())
 

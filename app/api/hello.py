@@ -6,6 +6,7 @@ logger = log.getLogger(__name__)
 
 
 class Hello(Resource):
+
     def get(self):
         result = {
             'name': 'Hello'

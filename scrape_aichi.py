@@ -1,5 +1,6 @@
 import settings  # noqa: F401
 import urllib.parse
+from urllib.error import HTTPError
 from datetime import date
 import re
 import os
@@ -10,6 +11,7 @@ import app.lib.util as util
 import app.models.Soup as Soup
 import app.models.PDFReader as PDFReader
 import app.models.Detail as Detail
+import app.models.Person as Person
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -28,8 +30,67 @@ COUNTRIES = [
 ]
 
 
+def _revise_detail(detail):
+    if not detail.get('age'):
+        raise Exception('age not defined. {}'.format(detail))
+    if re.match(r'\d+(代|歳代)$', detail['age']):
+        detail['age'] = re.sub(r'(\d+)(代|歳代|歳)$', r'\1', detail['age']) + 's'
+    elif re.match(r'\d+歳(児|)$', detail['age']):
+        detail['age'] = re.sub(r'(\d+)歳.*$', r'\1', detail['age']) + 's'
+    elif re.match(r'\d+歳未満(（小学生）|)$', detail['age']):
+        detail['age'] = re.sub(r'(\d+)歳未満.*$', r'\1', detail['age']) + 'u'
+    elif detail['age'] == 'unknown':
+        pass
+    else:
+        raise Exception('Age "{}" is invalid.'.format(detail['age']))
+
+    if detail['sex'] == '男性':
+        detail['sex'] = 'male'
+    elif detail['sex'] == '女性':
+        detail['sex'] = 'female'
+    elif detail['sex'] == 'unknown':
+        pass
+    else:
+        raise Exception('Sex "{}" is invalid.'.format(detail['sex']))
+
+    if len(detail['progress']) > 0:
+        # onset date
+        if not detail.get('onset_date'):
+            restr = r'^.*(' + '|'.join(config.CONDITIONS) + ').*$'
+            p0 = detail['progress'][0]
+            if re.match(restr, p0['content']):
+                detail['onset_date'] = p0['date']
+            else:
+                ps = list(filter(lambda p: re.match(restr, p['content']), detail['progress']))
+                if len(ps) > 0:
+                    detail['onset_date'] = ps[0]['date']
+
+        # hospitalization date
+        if not detail.get('hospitalization_date'):
+            ps = list(filter(lambda p: re.match('^.*入院.*$', p['content']) and not re.match('^.*入院予定.*$', p['content']), detail['progress']))  # noqa E501
+            if len(ps) > 0:
+                detail['hospitalization_date'] = ps[0]['date']
+
+        # confirmed date
+        if not detail.get('confirmed_date'):
+            ps = list(filter(lambda p: re.match('^.*陽性.*$', p['content']), detail['progress']))
+            if len(ps) > 0:
+                detail['confirmed_date'] = ps[0]['date']
+
+    for remark in (detail['remarks'] or []):
+        if re.match(r'^県内\d+例目.*の.+（濃厚接触者）$', remark):
+            person_no, relationship = \
+                re.sub(r'^県内(\d+)例目.*の(.+)（濃厚接触者）$', r'\1 \2', remark).split()
+            detail['contacts'] = detail.get('contacts', [])
+            detail['contacts'].append({'person_no': int(person_no), 'relationship': relationship})
+
+    return True
+
+
 def _scrape_aichi_detail_2(start_tag):
-    result = {}
+    result = {
+        'progress': [],
+    }
 
     content_type = 1
     if re.match(r'^.*患者.*について$', start_tag.text):
@@ -78,8 +139,6 @@ def _scrape_aichi_detail_2(start_tag):
                 else:
                     result[key] = re.sub(r'^　(.+)$', r'\1', text)
             elif term == 2:
-                if 'progress' not in result:
-                    result['progress'] = []
                 if re.match(r'^注\d+.*$', text):
                     pass
                 elif re.match(r'^\d+月\d+日 .+$', text):
@@ -120,8 +179,9 @@ def _scrape_aichi_detail_2(start_tag):
     if result.get('ignore'):
         return None
 
-    result['remarks'] = result['remarks'].split('\n') if result.get('remarks') else []
+    result['remarks'] = result.get('remarks', '').split('\n')
     result['remarks'] = list(map(lambda r: r.strip(), result['remarks']))
+    _revise_detail(result)
 
     return result
 
@@ -129,48 +189,56 @@ def _scrape_aichi_detail_2(start_tag):
 def scrape_release_details(url):
     results = []
 
-    soup = Soup.create_soup(url)
-    pdf_a = list(filter(
-        lambda a: re.match(r'^新型コロナウイルス感染症患者.*$', a.text),
-        soup.body.select('a')
-    ))
-    if len(pdf_a) > 0:
-        pdf_url = urllib.parse.urljoin(config.AICHI_PRESS_RELEASE_URL, pdf_a[0]['href'])
-        filename = re.sub(r'^.*\/([^\/]+)$', r'\1', pdf_url)
-        filepath = os.path.join(config.DATA_DIR, 'aichi', filename)
-        if not os.path.exists(filepath):
-            util.download_file(pdf_url, filepath=filepath)
+    try:
+        soup = Soup.create_soup(url)
+        pdf_a = list(filter(
+            lambda a: re.match(r'^新型コロナウイルス感染症患者.*$', a.text),
+            soup.body.select('a')
+        ))
+        if len(pdf_a) > 0:
+            pdf_url = urllib.parse.urljoin(config.AICHI_PRESS_RELEASE_URL, pdf_a[0]['href'])
+            filename = re.sub(r'^.*\/([^\/]+)$', r'\1', pdf_url)
+            filepath = os.path.join(config.DATA_DIR, 'aichi', filename)
+            if not os.path.exists(filepath):
+                util.download_file(pdf_url, filepath=filepath)
 
-        pdf_results = read_release_pdf(filepath)
-        for result in pdf_results:
-            result.update({
-                'url': url,
-                'pdf_url': pdf_url,
-            })
-            results.append(result)
+            pdf_results = read_release_pdf(filepath)
+            for result in pdf_results:
+                result.update({
+                    'url': url,
+                    'pdf_url': pdf_url,
+                })
+                results.append(result)
+            return results
+
+        detail_free = soup.body.select('.detail_free')
+        if detail_free is None:
+            raise('class "detail_free" not found.')
+
+        # <h2>1　患者Ａについて</h2>
+        # <h2>1　患者Ａについて（県内xx例目）</h2>
+        headers = []
+        header = detail_free[0].find('h2', text=re.compile(r'^.*患者概要$'))
+        if header:
+            headers = [header]
+        else:
+            # headers = detail_free[0].find_all('h2', text=re.compile(r'^.*患者.*について.*$'))
+            headers = list(filter(lambda h2: re.match(r'^\d+\s+患者.*について.*$', h2.text), detail_free[0].find_all('h2')))
+
+        results = list(map(lambda tag: _scrape_aichi_detail_2(tag), headers))
+        results = list(filter(lambda r: r is not None, results))
+
+        if len(results) == 0:
+            results.append({'url': url})
+
         return results
 
-    detail_free = soup.body.select('.detail_free')
-    if detail_free is None:
-        raise('class "detail_free" not found.')
+    except HTTPError as err:
+        if err.code == 404:
+            logger.warn('HTTP Error [%s]%s url=%s', err.code, err.reason, url)
+            return None
 
-    # <h2>1　患者Ａについて</h2>
-    # <h2>1　患者Ａについて（県内xx例目）</h2>
-    headers = []
-    header = detail_free[0].find('h2', text=re.compile(r'^.*患者概要$'))
-    if header:
-        headers = [header]
-    else:
-        # headers = detail_free[0].find_all('h2', text=re.compile(r'^.*患者.*について.*$'))
-        headers = list(filter(lambda h2: re.match(r'^\d+\s+患者.*について.*$', h2.text), detail_free[0].find_all('h2')))
-
-    results = list(map(lambda tag: _scrape_aichi_detail_2(tag), headers))
-    results = list(filter(lambda r: r is not None, results))
-
-    if len(results) == 0:
-        results.append({'url': url})
-
-    return results
+        raise err
 
 
 def _scrape_aichi_press_releases():
@@ -280,7 +348,7 @@ def read_release_pdf(filepath, debug=False):
         if d['key']:
             if d['key'] == 'age' and current_key:
                 if len(stocks) > 0:
-                    raise Exception('Undefined values {}'.format(','.join(stocks)))
+                    raise Exception('Unknown values {} in {}'.format(','.join(stocks), filepath))
                 result = {}
                 for _item in items:
                     result[_item['key']] = _item['value']
@@ -289,17 +357,24 @@ def read_release_pdf(filepath, debug=False):
                 items = []
 
             if d['value']:
-                item = {'key': d['key'], 'value': d['value']}
+                if d['key'] == 'remarks':
+                    d['value'] = re.sub(r'^・', '', d['value'])
+                item = {
+                    'key': d['key'],
+                    'value': d['value']
+                }
                 logger.debug('A> {}'.format(item))
 
-            elif d['key'] in ['onset_date', 'confirmed_date']:
+            elif re.match(r'^.+_date$', d['key']):
                 for s in list(filter(lambda s: re.match(r'^\d+月\d+日$', s), stocks)):
-                    item = {'key': d['key'], 'value': s}
+                    item = {
+                        'key': d['key'],
+                        'value': util.parse_japanese_date('令和2年' + s).strftime(r'%Y-%m-%d')}
                     logger.debug('P> {}'.format(item))
                     stocks.remove(s)
                     break
 
-            elif d['key'] in ['condition']:
+            elif d['key'] in ['condition', 'abroad_history', 'nationality']:
                 t = ''
                 while len(stocks) > 0:
                     s = stocks[0]
@@ -338,7 +413,7 @@ def read_release_pdf(filepath, debug=False):
                 break
 
         elif d['value'] in COUNTRIES:
-            for _item in list(filter(lambda _item: _item['key'] == 'nationality', items)):
+            for _item in list(filter(lambda _item: _item['key'] == 'nationality' and not _item.get('value'), items)):
                 item = _item
                 item['value'] = d['value']
                 logger.debug('U> {}'.format(item))
@@ -352,20 +427,12 @@ def read_release_pdf(filepath, debug=False):
                 break
 
         elif re.match(r'^\d+月\d+日$', d['value']):
-            for _item in list(filter(lambda _item: _item['key'] in ['onset_date', 'confirmed_date'], items)):
-                if _item['value']:
+            for _item in list(filter(lambda _item: re.match(r'^.+_date$', _item['key']), items)):
+                if _item['value'] or _item['value'] == '':
                     continue
                 item = _item
-                item['value'] = d['value']
+                item['value'] = util.parse_japanese_date('令和2年' + d['value']).strftime(r'%Y-%m-%d')
                 logger.debug('U> {}'.format(item))
-                break
-
-        elif re.match(r'^・.+$', d['value']):
-            for _item in list(filter(lambda _item: _item['key'] == 'remarks', items)):
-                item = _item
-                item['value'] = d['value']
-                logger.debug('U> {}'.format(item))
-                current_key = 'remarks'
                 break
 
         elif current_key == 'condition':
@@ -378,20 +445,31 @@ def read_release_pdf(filepath, debug=False):
         elif current_key == 'remarks':
             for _item in list(filter(lambda _item: _item['key'] == 'remarks', items)):
                 item = _item
-                item['value'] = (item.get('value') or '') + d['value']
+                item['value'] = item.get('value', '') + d['value']
                 logger.debug('+> {}'.format(item))
                 break
 
-        if not item:
-            for _item in list(filter(lambda r: r['value'] is None, items)):
-                if re.match(r'^\d+月\d+日$', d['value']):
-                    if _item['key'] not in ['onset_date', 'confirmed_date']:
-                        continue
+        elif re.match(r'^・.+$', d['value']):
+            for _item in list(filter(lambda _item: _item['key'] == 'remarks', items)):
                 item = _item
+                item['value'] = re.sub(r'^・', '', d['value'])
+                logger.debug('U> {}'.format(item))
+                current_key = 'remarks'
                 break
-            if item:
-                item['value'] = d['value']
+
+        if not item:
+            _items = list(filter(lambda r: r['value'] is None, items))
+            if len(_items) > 0:
+                item = _items[0]
+                if re.match(r'^.+_date$', item['key']):
+                    if re.match(r'^\d+月\d+日$', d['value']):
+                        item['value'] = util.parse_japanese_date('令和2年' + d['value']).strftime(r'%Y-%m-%d')
+                    else:
+                        item['value'] = ''
+                else:
+                    item['value'] = d['value']
                 logger.debug('O> {}'.format(item))
+
             else:
                 if not current_key:
                     logger.debug('I> %s', d['value'])
@@ -407,18 +485,19 @@ def read_release_pdf(filepath, debug=False):
         results.append(result)
 
     for result in results:
-        for key in result:
-            if not result[key]:
-                result[key] = '' if key == 'remarks' else 'unknown'
-            if key in ['onset_date', 'confirmed_date']:
-                if result[key] == '－':
-                    result[key] = ''
-                elif re.match(r'^\d+月\d+日$', result[key]):
-                    result[key] = util.parse_japanese_date('令和2年' + result[key]).strftime(r'%Y-%m-%d')
+        # for key in result:
+        #     if not result[key]:
+        #         result[key] = '' if key == 'remarks' else 'unknown'
+        #     if key in ['onset_date', 'confirmed_date']:
+        #         if result[key] == '－':
+        #             result[key] = ''
+        #         elif re.match(r'^\d+月\d+日$', result[key]):
+        #             result[key] = util.parse_japanese_date('令和2年' + result[key]).strftime(r'%Y-%m-%d')
 
         result['progress'] = result.get('progress') or []
         result['remarks'] = result['remarks'].split('\n') if result.get('remarks') else []
-        result['remarks'] = list(map(lambda r: re.sub(r'^・', '', r), result['remarks']))
+
+        _revise_detail(result)
 
     return results
 
@@ -431,13 +510,17 @@ def scrape_releases():
     for i, release in enumerate(releases):
         logger.info('detail {}/{}'.format(i + 1, len(releases)))
         details = scrape_release_details(release['url'])
+        if not details:
+            continue
         for detail in details:
+
             if detail.get('total_no') == 285:
                 no = 100
             elif detail.get('total_no') == 328:
                 no = 118
             else:
                 no += 1
+
             detail.update({
                 'no': no,
                 'release_date': release['date'],
@@ -445,77 +528,80 @@ def scrape_releases():
                 'url': release['url']
             })
 
-            if not detail.get('age'):
-                pprint(detail)
-                raise Exception('age')
-            if re.match(r'\d+(代|歳代)$', detail['age']):
-                detail['age'] = re.sub(r'(\d+)(代|歳代|歳)$', r'\1', detail['age']) + 's'
-            elif re.match(r'\d+歳(児|)$', detail['age']):
-                detail['age'] = re.sub(r'(\d+)歳.*$', r'\1', detail['age']) + 's'
-            elif re.match(r'\d+歳未満(（小学生）|)$', detail['age']):
-                detail['age'] = re.sub(r'(\d+)歳未満.*$', r'\1', detail['age']) + 'u'
-            elif detail['age'] == 'unknown':
-                pass
-            else:
-                raise Exception('Age "{}" not defined'.format(detail['age']))
+            # if detail.get('total_no') == 285:
+            #     no = 100
+            # elif detail.get('total_no') == 328:
+            #     no = 118
+            # else:
+            #     no += 1
+            # detail.update({
+            #     'no': no,
+            #     'release_date': release['date'],
+            #     'government': 'aichi',
+            #     'url': release['url']
+            # })
 
-            if detail['sex'] == '男性':
-                detail['sex'] = 'male'
-            elif detail['sex'] == '女性':
-                detail['sex'] = 'female'
-            elif detail['sex'] == 'unknown':
-                pass
-            else:
-                raise Exception('Sex "{}" not defined'.format(detail['sex']))
+            # if not detail.get('age'):
+            #     raise Exception('age not defined. {}'.format(detail))
+            # if re.match(r'\d+(代|歳代)$', detail['age']):
+            #     detail['age'] = re.sub(r'(\d+)(代|歳代|歳)$', r'\1', detail['age']) + 's'
+            # elif re.match(r'\d+歳(児|)$', detail['age']):
+            #     detail['age'] = re.sub(r'(\d+)歳.*$', r'\1', detail['age']) + 's'
+            # elif re.match(r'\d+歳未満(（小学生）|)$', detail['age']):
+            #     detail['age'] = re.sub(r'(\d+)歳未満.*$', r'\1', detail['age']) + 'u'
+            # elif detail['age'] == 'unknown':
+            #     pass
+            # else:
+            #     raise Exception('Age "{}" is invalid.'.format(detail['age']))
 
-            if detail['release_date'] == '2020-04-11':
-                detail['release_date'].append(
-                    '◎検査誤りの可能性あり（https://www.pref.aichi.jp/site/covid19-aichi/pressrelease-ncov200412.html）'
-                )
+            # if detail['sex'] == '男性':
+            #     detail['sex'] = 'male'
+            # elif detail['sex'] == '女性':
+            #     detail['sex'] = 'female'
+            # elif detail['sex'] == 'unknown':
+            #     pass
+            # else:
+            #     raise Exception('Sex "{}" is invalid.'.format(detail['sex']))
 
         results.extend(details)
 
     return results
 
 
-def revise_detail(detail):
-    if len(detail['progress']) > 0:
-        # onset date
-        restr = r'^.*(' + '|'.join(config.CONDITIONS) + ').*$'
-        p0 = detail['progress'][0]
-        if re.match(restr, p0['content']):
-            detail['onset_date'] = p0['date']
-        else:
-            ps = list(filter(lambda p: re.match(restr, p['content']), detail['progress']))
-            if len(ps) > 0:
-                detail['onset_date'] = ps[0]['date']
-
-        # hospitalization date
-        ps = list(filter(lambda p: re.match('^.*入院.*$', p['content']) and not re.match('^.*入院予定.*$', p['content']), detail['progress']))  # noqa E501
-        if len(ps) > 0:
-            detail['hospitalization_date'] = ps[0]['date']
-
-        # confirmed date
-        ps = list(filter(lambda p: re.match('^.*陽性.*$', p['content']), detail['progress']))
-        if len(ps) > 0:
-            detail['confirmed_date'] = ps[0]['date']
-
-    return detail
-
-
 # Main
 if __name__ == '__main__':
+
+    # details = read_release_pdf('data/aichi/330692.pdf', debug=True)
+    # pprint(details)
+    # exit()
 
     current_details = Detail.find(order=['-release_date'], limit=1)
     current_date = current_details[0]['release_date']
 
     details = scrape_releases()
     details = list(filter(lambda d: d['release_date'] > current_date, details))
-    details = list(map(lambda d: revise_detail(d), details))
 
     for detail in details:
         pprint(detail)
         Detail.insert(detail)
         logger.info('Add Aichi detail [%s]', detail['no'])
+
+        if detail.get('total_no'):
+            person = Person.find_by_no(detail['total_no'])
+            if not person:
+                logger.warn('Person[{}] not exists.'.format(detail['total_no']))
+                continue
+
+            updated = False
+            for d_contact in detail.get('contacts', []):
+
+                for contact in list(filter(lambda c: c['person_no'] == d_contact['person_no'], person['contacts'])):
+                    contact['relationship'] = contact.get('relationship', d_contact.get('relationship'))
+                    updated = True
+
+            if updated:
+                pprint(person)
+                Person.update(person)
+                logger.info('Update Person [%s]', person['no'])
 
     exit()
