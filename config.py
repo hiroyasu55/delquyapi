@@ -60,13 +60,22 @@ CONDITIONS = [
 
 
 AICHI_SUMMARY_URL = \
-    'https://www.pref.aichi.jp/site/covid19-aichi/kansensya-kensa.html'
+    'https://www.pref.aichi.jp/site/covid19-aichi/'
+#    'https://www.pref.aichi.jp/site/covid19-aichi/kansensya-kensa.html'
 AICHI_PRESS_RELEASE_URL = \
-    'https://www.pref.aichi.jp/site/covid19-aichi/corona-kisya.html'
+    'https://www.pref.aichi.jp/site/covid19-aichi/list550-1516.html'
+#    'https://www.pref.aichi.jp/site/covid19-aichi/corona-kisya.html'
 AICHI_TAISAKUHONBU_URL = \
     'https://www.pref.aichi.jp/site/covid19-aichi/novel-coronavirus-taisakuhonbu.html'
 NAGOYA_PRESS_RELEASE_URL = \
     'http://www.city.nagoya.jp/kenkofukushi/page/0000126920.html'
+TOYOTA_PRESS_RELEASE_URL = \
+    'https://www.city.toyota.aichi.jp/kurashi/kenkou/eisei/1039225.html'
+#    'https://www.city.toyota.aichi.jp/kurashi/kenkou/eisei/1037578.html'
+OKAZAKI_PRESS_RELEASE_URL = \
+    'https://www.city.okazaki.lg.jp/1550/1562/1615/p025980.html'
+TOYOHASHI_PRESS_RELEASE_URL = \
+    'https://www.city.toyohashi.lg.jp/41805.htm'
 
 DEBUG = False
 

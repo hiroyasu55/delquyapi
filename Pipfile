@@ -29,6 +29,7 @@ pdfminer-six = "*"
 flask-restful = "*"
 tabula-py = "*"
 flask-jwt = "*"
+jaconv = "*"
 
 [requires]
 python_version = "3.7"

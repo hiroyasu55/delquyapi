@@ -58,12 +58,13 @@ def find_by_id(id):
     return Datastore.entity_to_dict(entity)
 
 
-def find_by_government(government, order=[], offset=0, limit=None):
-    filters = [{
+def find_by_government(government, filters=[], order=[], offset=0, limit=None):
+    _filters = [{
         'key': 'government',
         'value': government
     }]
-    return find(filters=filters, order=order, offset=offset, limit=limit)
+    _filters.extend(filters)
+    return find(filters=_filters, order=order, offset=offset, limit=limit)
 
 
 def find_by_government_no(government, no):

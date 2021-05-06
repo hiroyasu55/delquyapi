@@ -3,20 +3,25 @@ from pdfminer.layout import LAParams, LTContainer, LTTextBox
 from pdfminer.pdfinterp import PDFPageInterpreter, PDFResourceManager
 from pdfminer.pdfpage import PDFPage
 from io import StringIO
-from pprint import pprint
+from pprint import pprint  # noqa: F401
 
 
 def _find_textboxes_recursively(layout):
+    results = []
+
     if isinstance(layout, LTTextBox):
-        return [layout]
+        results = [layout]
 
     elif isinstance(layout, LTContainer):
         boxes = []
         for child in layout:
             boxes.extend(_find_textboxes_recursively(child))
-        return boxes
+        results = boxes
 
-    return []
+    # else:
+    #     raise Exception('Unknown layout', layout)
+
+    return results
 
 
 def read_textboxes(filepath, pages=None, direction='horizontal'):
