@@ -36,5 +36,5 @@ six==1.14.0
 sortedcontainers==2.1.0
 soupsieve==2.0
 urllib3==1.25.9
-werkzeug==1.0.1
+werkzeug==2.2.3
 xlrd==1.2.0
